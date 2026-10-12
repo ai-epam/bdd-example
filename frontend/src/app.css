@@ -38,3 +38,9 @@ td.approved { color: #16a34a; } td.declined { color: #dc2626; }
 .pill { display: inline-block; margin-left: .75rem; padding: 0 .55rem; border-radius: 999px; font: 600 .72rem system-ui, sans-serif; color: #fff; }
 .pill.passed { background: #16a34a; } .pill.failed { background: #dc2626; }
 .pill.skipped, .pill.unknown { background: #9ca3af; }
+.login { max-width: 360px; margin: 3rem auto; }
+.login button.primary { width: 100%; }
+.hint { font-size: .8rem; margin-bottom: 0; }
+header .spacer { flex: 1; }
+.who { color: #cbd2e0; font-size: .9rem; }
+button.logout { background: none; color: #fff; border-color: #51608a; }
