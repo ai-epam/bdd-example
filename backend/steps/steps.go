@@ -18,7 +18,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 		return context.WithValue(ctx, worldKey{}, newWorld()), nil
 	})
 	sc.After(func(ctx context.Context, s *godog.Scenario, err error) (context.Context, error) {
-		Report.record(s, err)
+		Report.record(s, err, time.Since(from(ctx).start))
 		return ctx, nil
 	})
 
