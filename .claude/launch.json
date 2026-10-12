@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "backend", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "cd backend && ENABLE_BDD_RUNNER=1 go run ./cmd/server"], "port": 8080 },
+    { "name": "frontend", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "cd frontend && npm run dev"], "port": 5173 }
+  ]
+}
