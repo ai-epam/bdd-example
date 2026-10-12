@@ -2,7 +2,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
+	"authgate/internal/auth"
 	"authgate/internal/authz"
 	"authgate/internal/domain"
 	"authgate/internal/store"
@@ -26,32 +29,40 @@ type Config struct {
 }
 
 type server struct {
-	st  *store.Store
-	cfg Config
+	st   *store.Store
+	auth *auth.Service
+	cfg  Config
 }
 
 // NewRouter builds the HTTP handler.
-func NewRouter(st *store.Store, cfg Config) http.Handler {
-	s := &server{st: st, cfg: cfg}
+func NewRouter(st *store.Store, au *auth.Service, cfg Config) http.Handler {
+	s := &server{st: st, auth: au, cfg: cfg}
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{"http://localhost:5173"},
 		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
 	}))
 	r.Route("/api", func(r chi.Router) {
-		r.Post("/authorize", s.authorize)
-		r.Get("/seed", s.seed)
-		r.Get("/accounts/{id}", s.account)
-		r.Get("/cards/{id}/transactions", s.cardTransactions)
-		r.Post("/reset", s.reset)
-		r.Get("/features", s.features)
-		r.Get("/bdd-report", s.report)
-		if cfg.EnableRunner {
-			r.Post("/bdd/run", s.runBDD)
-		}
+		r.Post("/login", s.login)
 		r.Get("/config", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]bool{"bddRunner": cfg.EnableRunner})
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Post("/logout", s.logout)
+			r.Get("/me", s.me)
+			r.Post("/authorize", s.authorize)
+			r.Get("/seed", s.seed)
+			r.Get("/accounts/{id}", s.account)
+			r.Get("/cards/{id}/transactions", s.cardTransactions)
+			r.Post("/reset", s.reset)
+			r.Get("/features", s.features)
+			r.Get("/bdd-report", s.report)
+			if cfg.EnableRunner {
+				r.Post("/bdd/run", s.runBDD)
+			}
 		})
 	})
 	return r
@@ -196,4 +207,60 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+type ctxKey struct{}
+
+func bearer(r *http.Request) string {
+	tok, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return tok
+}
+
+func (s *server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess, ok := s.auth.Validate(bearer(r))
+		if !ok {
+			writeErr(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, sess)))
+	})
+}
+
+func (s *server) login(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	sess, err := s.auth.Login(b.Username, b.Password)
+	if err != nil {
+		var le *auth.LoginError
+		code := http.StatusUnauthorized
+		reason := auth.InvalidCredentials
+		if errors.As(err, &le) {
+			reason = le.Reason
+			switch reason {
+			case auth.MissingCredentials:
+				code = http.StatusBadRequest
+			case auth.AccountLocked:
+				code = http.StatusTooManyRequests
+			}
+		}
+		writeJSON(w, code, map[string]string{"error": reason, "reason": reason})
+		return
+	}
+	writeJSON(w, http.StatusOK, sess)
+}
+
+func (s *server) logout(w http.ResponseWriter, r *http.Request) {
+	s.auth.Logout(bearer(r))
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *server) me(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, r.Context().Value(ctxKey{}))
 }

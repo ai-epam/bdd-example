@@ -32,6 +32,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^(\d+) approved transactions? on card "([^"]*)" in the last (\d+) seconds$`, approvedInLast)
 	sc.Step(`^(\d+) approved transactions? on card "([^"]*)" (\d+) seconds ago$`, approvedAgo)
 	sc.Step(`^I authorize "([^"]*)" ([A-Z]{3}) on card "([^"]*)" at merchant "([^"]*)"$`, authorize)
+	registerAuthSteps(sc)
 	sc.Step(`^the transaction is "(approved|declined)"$`, transactionIs)
 	sc.Step(`^the decline reason is "([^"]*)"$`, declineReason)
 	sc.Step(`^the account balance of "([^"]*)" becomes "([^"]*)" ([A-Z]{3})$`, balanceBecomes)
@@ -39,7 +40,9 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 }
 
 func seeded(ctx context.Context) {
-	from(ctx).store.Reset()
+	w := from(ctx)
+	w.store.Reset()
+	w.auth.Reset()
 }
 
 func cardActiveWithBalance(ctx context.Context, cardID, amount, cur string) error {
@@ -113,7 +116,7 @@ func insertApproved(w *world, n int, cardID string, age time.Duration) error {
 	for i := 0; i < n; i++ {
 		w.store.InsertTransaction(domain.Transaction{
 			CardID: cardID, MerchantID: "MERCH-COFFEE", Amount: 100, Currency: cur,
-			CreatedAt: epoch.Add(-age), Status: "approved",
+			CreatedAt: w.now.Add(-age), Status: "approved",
 		})
 	}
 	return nil

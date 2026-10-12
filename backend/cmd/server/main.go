@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"authgate/internal/api"
+	"authgate/internal/auth"
 	"authgate/internal/store"
 )
 
@@ -16,5 +17,5 @@ func main() {
 		EnableRunner: os.Getenv("ENABLE_BDD_RUNNER") == "1",
 	}
 	log.Println("AuthGate listening on :8080 (bdd runner enabled:", cfg.EnableRunner, ")")
-	log.Fatal(http.ListenAndServe(":8080", api.NewRouter(store.New(), cfg)))
+	log.Fatal(http.ListenAndServe(":8080", api.NewRouter(store.New(), auth.New(), cfg)))
 }

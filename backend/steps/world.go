@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"authgate/internal/auth"
 	"authgate/internal/authz"
 	"authgate/internal/store"
 )
@@ -18,18 +19,25 @@ var epoch = time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
 
 // world is the per-scenario state, carried through context.Context.
 type world struct {
-	store  *store.Store
-	last   authz.Result
-	ran    bool
-	before map[string]int64 // account balance just before the last authorization
-	start  time.Time
+	store    *store.Store
+	auth     *auth.Service
+	now      time.Time // scenario clock; advance with advance()
+	sess     auth.Session
+	loginErr error
+	loggedIn bool
+	last     authz.Result
+	ran      bool
+	before   map[string]int64 // account balance just before the last authorization
+	start    time.Time
 }
 
 type worldKey struct{}
 
 func newWorld() *world {
-	w := &world{store: store.New(), before: map[string]int64{}, start: time.Now()}
-	w.store.SetClock(func() time.Time { return epoch })
+	w := &world{store: store.New(), auth: auth.New(), before: map[string]int64{}, start: time.Now(), now: epoch}
+	clock := func() time.Time { return w.now }
+	w.store.SetClock(clock)
+	w.auth.SetClock(clock)
 	return w
 }
 

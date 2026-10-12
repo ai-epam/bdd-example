@@ -30,7 +30,8 @@ make test         # everything except @wip (CI-friendly)
 make bdd TAGS=@smoke   # TAGS is passed through to godog (e.g. '~@wip')
 ```
 
-Open <http://localhost:5173>. To get the **Run BDD suite** button in the UI, start the
+Open <http://localhost:5173> and sign in with a demo user: `alice` / `wonderland1` or
+`bob` / `builder123`. To get the **Run BDD suite** button in the UI, start the
 backend with `ENABLE_BDD_RUNNER=1 make backend`.
 
 `make bdd` writes `bdd-report.json` in the repo root; the Scenarios tab reads it.
@@ -45,7 +46,7 @@ backend with `ENABLE_BDD_RUNNER=1 make backend`.
    `backend/steps/steps.go` and `authz.Refund` in the engine. (Short on time?
    `git apply demo/refund.patch` applies a ready-made implementation.)
 3. `make bdd` → **green**. Refresh the Scenarios tab.
-4. Switch to **Playground**, pick `CARD-002`, authorize $12.50 at Blue Bottle Coffee:
+4. Sign in, switch to **Playground**, pick `CARD-002`, authorize $12.50 at Blue Bottle Coffee:
    it declines with `CARD_FROZEN` — the same behavior the Gherkin asserts.
    Then pick `CARD-001` and watch the balance go $500.00 → $487.50.
 
@@ -57,6 +58,14 @@ backend with `ENABLE_BDD_RUNNER=1 make backend`.
 4. Run again: red, because the rule does not exist yet.
 5. Add the rule function to the ordered list in `backend/internal/authz/rules.go`.
 6. `make bdd` — green.
+
+## Login
+
+Every `/api` endpoint except `/api/login` and `/api/config` needs `Authorization: Bearer <token>`.
+Behavior is specified in `backend/features/login.feature`: wrong credentials and unknown users
+give the same `INVALID_CREDENTIALS`; three failures lock the account for 5 minutes
+(`ACCOUNT_LOCKED`); sessions last 30 minutes and end on logout. Passwords are PBKDF2-hashed;
+sessions live in memory and are lost on restart.
 
 ## Rules (first failure wins)
 
@@ -75,10 +84,11 @@ backend/
   cmd/server/main.go            HTTP server bootstrap
   internal/domain/types.go      Account, Card, Merchant, Transaction
   internal/store/               thread-safe in-memory KV, seed data, Reset()
+  internal/auth/                login, sessions, lockout (in-memory, demo users)
   internal/authz/               engine.go (Authorize) + rules.go (rules, reason codes)
   internal/api/handlers.go      chi handlers (+ integration test)
   features/*.feature            the Gherkin specs
-  steps/                        godog steps + JSON report collector
+  steps/                        godog steps (steps.go, auth_steps.go) + JSON report collector
   features_test.go              godog entry point (writes ../bdd-report.json)
 frontend/                       Svelte 5 + Vite + TS (Playground, BDD Scenarios)
 demo/refund.patch               ready-made refund implementation for the demo
@@ -86,5 +96,5 @@ demo/refund.patch               ready-made refund implementation for the demo
 
 ## What this demo deliberately omits
 
-No real network calls, no persistence, no authentication, no money movement. The point
+No real network calls, no persistence, no money movement, and only a demo-grade login (two seeded users, no registration, roles or password reset). The point
 is the loop, not production readiness.
