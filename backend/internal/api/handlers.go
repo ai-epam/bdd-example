@@ -155,16 +155,11 @@ func (s *server) reset(w http.ResponseWriter, _ *http.Request) {
 func (s *server) features(w http.ResponseWriter, _ *http.Request) {
 	files, _ := filepath.Glob(filepath.Join(s.cfg.FeaturesDir, "*.feature"))
 	sort.Strings(files)
-	out := []map[string]string{}
+	out := []string{}
 	for _, f := range files {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
+		if b, err := os.ReadFile(f); err == nil {
+			out = append(out, string(b))
 		}
-		out = append(out, map[string]string{
-			"path":    filepath.ToSlash(filepath.Join("features", filepath.Base(f))),
-			"content": string(b),
-		})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
