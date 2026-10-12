@@ -22,12 +22,13 @@ type world struct {
 	last   authz.Result
 	ran    bool
 	before map[string]int64 // account balance just before the last authorization
+	start  time.Time
 }
 
 type worldKey struct{}
 
 func newWorld() *world {
-	w := &world{store: store.New(), before: map[string]int64{}}
+	w := &world{store: store.New(), before: map[string]int64{}, start: time.Now()}
 	w.store.SetClock(func() time.Time { return epoch })
 	return w
 }

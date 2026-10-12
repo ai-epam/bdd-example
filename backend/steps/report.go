@@ -33,15 +33,14 @@ type ReportDoc struct {
 }
 
 type collector struct {
-	mu      sync.Mutex
-	started map[string]time.Time
-	doc     ReportDoc
+	mu  sync.Mutex
+	doc ReportDoc
 }
 
 // Report collects scenario outcomes from the After hook.
 var Report = &collector{}
 
-func (c *collector) record(s *godog.Scenario, err error) {
+func (c *collector) record(s *godog.Scenario, err error, d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	status, msg := "passed", ""
@@ -64,7 +63,7 @@ func (c *collector) record(s *godog.Scenario, err error) {
 		c.doc.Features = append(c.doc.Features, FeatureReport{Name: featureName(s.Uri), Path: s.Uri})
 		idx = len(c.doc.Features) - 1
 	}
-	c.doc.Features[idx].Scenarios = append(c.doc.Features[idx].Scenarios, ScenarioReport{Name: s.Name, Status: status, Error: msg})
+	c.doc.Features[idx].Scenarios = append(c.doc.Features[idx].Scenarios, ScenarioReport{Name: s.Name, Status: status, DurationMs: d.Milliseconds(), Error: msg})
 	switch status {
 	case "passed":
 		c.doc.Passed++
