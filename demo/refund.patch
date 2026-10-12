@@ -1,0 +1,74 @@
+diff --git a/backend/internal/authz/engine.go b/backend/internal/authz/engine.go
+index 47f941e..7dcb139 100644
+--- a/backend/internal/authz/engine.go
++++ b/backend/internal/authz/engine.go
+@@ -2,6 +2,8 @@
+ package authz
+ 
+ import (
++	"fmt"
++
+ 	"authgate/internal/domain"
+ 	"authgate/internal/store"
+ )
+@@ -65,3 +67,23 @@ func Authorize(st *store.Store, req Request) (Result, error) {
+ 	})
+ 	return res, nil
+ }
++
++// Refund reverses an approved transaction: the account is credited and the
++// transaction is marked refunded.
++func Refund(st *store.Store, txnID string) error {
++	var err error
++	st.Update(func(tx *store.Tx) {
++		t, ok := tx.Transaction(txnID)
++		if !ok || t.Status != "approved" {
++			err = fmt.Errorf("transaction %s is not refundable", txnID)
++			return
++		}
++		c, _ := tx.Card(t.CardID)
++		a, _ := tx.Account(c.AccountID)
++		a.Balance += t.Amount
++		tx.PutAccount(a)
++		t.Status = "refunded"
++		tx.PutTransaction(t)
++	})
++	return err
++}
+diff --git a/backend/internal/store/store.go b/backend/internal/store/store.go
+index b925d38..ea5d8b2 100644
+--- a/backend/internal/store/store.go
++++ b/backend/internal/store/store.go
+@@ -216,3 +216,8 @@ func (s *Store) InsertTransaction(x domain.Transaction) string {
+ 	})
+ 	return id
+ }
++
++func (t *Tx) Transaction(id string) (domain.Transaction, bool) {
++	x, ok := t.s.kv["txn:"+id].(domain.Transaction)
++	return x, ok
++}
+diff --git a/backend/steps/steps.go b/backend/steps/steps.go
+index ba8ec33..d724672 100644
+--- a/backend/steps/steps.go
++++ b/backend/steps/steps.go
+@@ -32,6 +32,7 @@ func InitializeScenario(sc *godog.ScenarioContext) {
+ 	sc.Step(`^(\d+) approved transactions? on card "([^"]*)" in the last (\d+) seconds$`, approvedInLast)
+ 	sc.Step(`^(\d+) approved transactions? on card "([^"]*)" (\d+) seconds ago$`, approvedAgo)
+ 	sc.Step(`^I authorize "([^"]*)" ([A-Z]{3}) on card "([^"]*)" at merchant "([^"]*)"$`, authorize)
++	sc.Step(`^I refund the last transaction$`, refundLast)
+ 	sc.Step(`^the transaction is "(approved|declined)"$`, transactionIs)
+ 	sc.Step(`^the decline reason is "([^"]*)"$`, declineReason)
+ 	sc.Step(`^the account balance of "([^"]*)" becomes "([^"]*)" ([A-Z]{3})$`, balanceBecomes)
+@@ -204,3 +205,11 @@ func balanceUnchanged(ctx context.Context, accountID string) error {
+ 	}
+ 	return nil
+ }
++
++func refundLast(ctx context.Context) error {
++	w := from(ctx)
++	if !w.ran {
++		return errors.New("no authorization to refund")
++	}
++	return authz.Refund(w.store, w.last.TransactionID)
++}
